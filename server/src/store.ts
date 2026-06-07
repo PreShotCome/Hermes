@@ -22,6 +22,8 @@ export interface HeartbeatInput {
   powerWatts?: number;
   gpuUtil?: number;
   gpuTemp?: number;
+  gatewayOnline?: boolean;
+  networkDifficulty?: number;
 }
 
 interface WorkerRow {
@@ -42,6 +44,8 @@ interface WorkerRow {
   power_watts: number;
   gpu_util: number;
   gpu_temp: number;
+  gateway_online: number;
+  network_difficulty: number;
 }
 
 /**
@@ -80,6 +84,8 @@ export class Store extends EventEmitter {
       powerWatts: row.power_watts,
       gpuUtil: row.gpu_util,
       gpuTemp: row.gpu_temp,
+      gatewayOnline: !!row.gateway_online,
+      networkDifficulty: row.network_difficulty,
     };
   }
 
@@ -113,12 +119,15 @@ export class Store extends EventEmitter {
     const powerWatts = input.powerWatts ?? 0;
     const gpuUtil = input.gpuUtil ?? 0;
     const gpuTemp = input.gpuTemp ?? 0;
+    const gatewayOnline = input.gatewayOnline ? 1 : 0;
+    const networkDifficulty = input.networkDifficulty ?? 0;
     const result = this.db
       .prepare(
         `UPDATE workers
             SET last_seen = ?, status = 'online', tops = ?,
                 solutions = ?, accepted = ?, rejected = ?, uptime_seconds = ?,
-                power_watts = ?, gpu_util = ?, gpu_temp = ?
+                power_watts = ?, gpu_util = ?, gpu_temp = ?,
+                gateway_online = ?, network_difficulty = ?
           WHERE id = ?`,
       )
       .run(
@@ -131,6 +140,8 @@ export class Store extends EventEmitter {
         powerWatts,
         gpuUtil,
         gpuTemp,
+        gatewayOnline,
+        networkDifficulty,
         id,
       );
     if (result.changes === 0) {

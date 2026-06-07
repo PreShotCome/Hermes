@@ -28,7 +28,9 @@ export function openDatabase(dbPath: string): Database.Database {
       uptime_seconds INTEGER NOT NULL DEFAULT 0,
       power_watts    REAL NOT NULL DEFAULT 0,
       gpu_util       REAL NOT NULL DEFAULT 0,
-      gpu_temp       REAL NOT NULL DEFAULT 0
+      gpu_temp       REAL NOT NULL DEFAULT 0,
+      gateway_online INTEGER NOT NULL DEFAULT 0,
+      network_difficulty REAL NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS samples (
       id             INTEGER PRIMARY KEY AUTOINCREMENT,

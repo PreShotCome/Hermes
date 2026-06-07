@@ -26,7 +26,7 @@ Key flags (all also settable via the matching environment variable):
 
 | Flag / env | Default | Description |
 |---|---|---|
-| `--mode` / `MINER_MODE` | `reference` | `reference` or `live` |
+| `--mode` / `MINER_MODE` | `reference` | `reference`, `live`, or `monitor` |
 | `--gateway` / `GATEWAY` | `127.0.0.1:3434` | mock gateway `host:port`, or pearl-gateway endpoint (live) |
 | `--network` / `NETWORK` | `mock` | label shown on the dashboard |
 | `--worker-name` / `WORKER_NAME` | `pearl-worker-1` | name shown on the dashboard |
@@ -70,6 +70,24 @@ dashboard. Block rewards accrue to the `--miningaddr` configured on `pearld`.
 > Honest note: Pearl mining profitability is thin and declining, and you only
 > profit when reward value exceeds your electricity cost. Mine only on power you
 > pay for or are authorized to use.
+
+## Monitor mode — watch a real rig, don't compete with it
+
+The official `vllm-miner` container does the actual GPU mining. To put that rig
+on this dashboard without running your own compute, use monitor mode:
+
+```bash
+pearl-worker --mode monitor --network mainnet \
+  --gateway 127.0.0.1:8337 \
+  --worker-name rtx3060-rig \
+  --server-url http://127.0.0.1:4000
+```
+
+It reports GPU power/util/temp (via `nvidia-smi`) and probes the running
+`pearl-gateway` (TCP `host:port` or a UDS socket path) to show whether it's
+online and the current network difficulty — but performs no mining itself, so it
+won't steal resources from the real miner. See
+[`docs/windows-mining.md`](../docs/windows-mining.md) for the full RTX 3060 setup.
 
 ## Efficiency
 

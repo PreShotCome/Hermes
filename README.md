@@ -125,7 +125,18 @@ against the official Pearl stack on hardware you control:
    ```
 
 Block rewards accrue to the mining address configured on `pearld`. See
-[`worker/README.md`](worker/README.md) for full details.
+[`worker/README.md`](worker/README.md) for full details, and
+[`docs/windows-mining.md`](docs/windows-mining.md) for a complete Windows + RTX
+3060 walkthrough with helper scripts.
+
+To watch a rig whose mining is done by the official `vllm-miner` (rather than
+this worker), run the worker in **monitor mode** — it reports the rig's GPU power
+and efficiency to this dashboard without doing its own compute:
+
+```bash
+pearl-worker --mode monitor --network mainnet --gateway 127.0.0.1:8337 \
+  --worker-name rtx3060-rig --server-url http://127.0.0.1:4000
+```
 
 ## Worker configuration
 

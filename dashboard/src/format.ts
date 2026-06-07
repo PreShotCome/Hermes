@@ -74,3 +74,14 @@ export function formatTemp(celsius: number): string {
   }
   return `${celsius.toFixed(0)}°C`;
 }
+
+/** Format a (potentially astronomical) network difficulty compactly. */
+export function formatDifficulty(difficulty: number): string {
+  if (!Number.isFinite(difficulty) || difficulty <= 0) {
+    return '—';
+  }
+  if (difficulty < 1000) {
+    return difficulty.toFixed(0);
+  }
+  return difficulty.toExponential(2);
+}

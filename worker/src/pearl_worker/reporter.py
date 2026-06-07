@@ -96,4 +96,7 @@ class Reporter(threading.Thread):
                 body["powerWatts"] = power.power_watts
                 body["gpuUtil"] = power.gpu_util
                 body["gpuTemp"] = power.gpu_temp
+            online, difficulty = self.stats.gateway_snapshot()
+            body["gatewayOnline"] = online
+            body["networkDifficulty"] = difficulty
             _post(f"{self.base}/api/workers/{self._worker_id}/heartbeat", body)

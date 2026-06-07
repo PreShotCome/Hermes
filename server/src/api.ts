@@ -20,6 +20,8 @@ const heartbeatSchema = z.object({
   powerWatts: z.coerce.number().min(0).default(0),
   gpuUtil: z.coerce.number().min(0).default(0),
   gpuTemp: z.coerce.number().default(0),
+  gatewayOnline: z.coerce.boolean().default(false),
+  networkDifficulty: z.coerce.number().min(0).default(0),
 });
 
 /** Build the REST API router backed by the given store. */

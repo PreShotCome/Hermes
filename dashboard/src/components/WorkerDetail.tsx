@@ -7,6 +7,7 @@ import {
   formatWatts,
   formatEfficiency,
   formatTemp,
+  formatDifficulty,
 } from '../format';
 import { RateChart } from './RateChart';
 
@@ -87,6 +88,18 @@ export function WorkerDetail({
             <dt>Network</dt>
             <dd>{worker.network}</dd>
           </div>
+          {worker.mode !== 'reference' && (
+            <div className="row">
+              <dt>Gateway</dt>
+              <dd>{worker.gatewayOnline ? 'online' : 'offline'}</dd>
+            </div>
+          )}
+          {worker.networkDifficulty > 0 && (
+            <div className="row">
+              <dt>Net difficulty</dt>
+              <dd>{formatDifficulty(worker.networkDifficulty)}</dd>
+            </div>
+          )}
           {worker.wallet && (
             <div className="row">
               <dt>Wallet</dt>

@@ -22,6 +22,8 @@ class Stats:
         self.solutions = 0  # PoUW solutions found (winning transcripts)
         self.accepted = 0  # solutions accepted by the gateway / chain
         self.rejected = 0  # solutions rejected
+        self.gateway_online = False  # is the gateway reachable?
+        self.network_difficulty = 0.0  # MAX_TARGET / current target
 
     def add_matmul_ops(self, n: int) -> None:
         with self._lock:
@@ -38,6 +40,15 @@ class Stats:
     def add_rejected(self) -> None:
         with self._lock:
             self.rejected += 1
+
+    def set_gateway(self, online: bool, difficulty: float = 0.0) -> None:
+        with self._lock:
+            self.gateway_online = online
+            self.network_difficulty = difficulty
+
+    def gateway_snapshot(self) -> tuple[bool, float]:
+        with self._lock:
+            return self.gateway_online, self.network_difficulty
 
     def uptime_seconds(self) -> int:
         return int(time.monotonic() - self._started)

@@ -19,6 +19,8 @@ export interface Worker {
   powerWatts: number;
   gpuUtil: number;
   gpuTemp: number;
+  gatewayOnline: boolean;
+  networkDifficulty: number;
 }
 
 export interface Sample {

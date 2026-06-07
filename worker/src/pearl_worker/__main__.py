@@ -6,7 +6,7 @@ import logging
 import sys
 
 from .config import Config
-from .engine import LiveEngine, ReferenceEngine
+from .engine import LiveEngine, MonitorEngine, ReferenceEngine
 from .gateway import MockGatewayClient
 from .reporter import Reporter
 from .stats import Stats
@@ -21,8 +21,13 @@ def main(argv: list[str] | None = None) -> int:
     config = Config.parse(argv)
     stats = Stats()
 
-    if config.mode == "live":
-        engine: ReferenceEngine | LiveEngine = LiveEngine(
+    engine: ReferenceEngine | LiveEngine | MonitorEngine
+    if config.mode == "monitor":
+        engine = MonitorEngine(
+            stats, network=config.network, gateway_endpoint=config.gateway
+        )
+    elif config.mode == "live":
+        engine = LiveEngine(
             stats, network=config.network, gateway_endpoint=config.gateway
         )
     else:
@@ -51,6 +56,11 @@ def main(argv: list[str] | None = None) -> int:
         log.info(
             "REFERENCE MODE: real matmul PoUW, locally verified — earns no PRL. "
             "Use --mode live with a pearld node + GPU to earn."
+        )
+    elif info.mode == "monitor":
+        log.info(
+            "MONITOR MODE: reporting GPU power/util/temp and gateway status — "
+            "no mining here. The official vllm-miner does the actual mining."
         )
 
     Reporter(

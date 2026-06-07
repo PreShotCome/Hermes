@@ -19,9 +19,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
+import logging
+
 from . import pouw
-from .gateway import GatewayJob, GatewayClient
+from .gateway import GatewayJob, GatewayClient, LiveGatewayClient
 from .stats import Stats
+
+_LOG = logging.getLogger("pearl-worker.engine")
 
 
 @dataclass
@@ -84,6 +88,7 @@ class ReferenceEngine:
 
     def run_forever(self) -> None:
         job = self.gateway.get_job()
+        self.stats.set_gateway(True, job.difficulty)
         last_job_poll = time.monotonic()
         while True:
             solution = self._attempt(job)
@@ -97,7 +102,42 @@ class ReferenceEngine:
             # Refresh the job periodically (new block template / target).
             if time.monotonic() - last_job_poll > self.gateway.job_refresh_seconds:
                 job = self.gateway.get_job()
+                self.stats.set_gateway(True, job.difficulty)
                 last_job_poll = time.monotonic()
+
+
+class MonitorEngine:
+    """Watch a real rig without mining.
+
+    The official ``vllm-miner`` container does the actual GPU mining and block
+    submission. This engine does *no* compute of its own — it just confirms the
+    pearl-gateway is reachable (and reads the live network difficulty) on an
+    interval, while the reporter samples GPU power/util/temp. Run it alongside
+    the real miner to put that rig — and its power efficiency — on the dashboard
+    without competing for resources.
+    """
+
+    def __init__(
+        self, stats: Stats, *, network: str, gateway_endpoint: str, poll_seconds: float = 10.0
+    ) -> None:
+        self.stats = stats
+        self.network = network
+        self.poll_seconds = poll_seconds
+        self.gateway = LiveGatewayClient(gateway_endpoint, network)
+
+    @property
+    def info(self) -> EngineInfo:
+        return EngineInfo(mode="monitor", device=_detect_gpu(), network=self.network)
+
+    def run_forever(self) -> None:
+        while True:
+            try:
+                job = self.gateway.get_job()
+                self.stats.set_gateway(True, job.difficulty)
+            except Exception as exc:
+                self.stats.set_gateway(False, 0.0)
+                _LOG.warning("gateway probe failed: %s", exc)
+            time.sleep(self.poll_seconds)
 
 
 class LiveEngine:

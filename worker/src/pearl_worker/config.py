@@ -33,14 +33,16 @@ class Config:
         p.add_argument(
             "--mode",
             default=_env("MINER_MODE", "reference"),
-            choices=["reference", "live"],
+            choices=["reference", "live", "monitor"],
             help="reference = real CPU matmul PoUW, earns nothing (default); "
-            "live = submit ZK proofs to a real pearld node and earn PRL",
+            "live = submit ZK proofs to a real pearld node and earn PRL; "
+            "monitor = watch a real rig (GPU power + gateway status), no mining",
         )
         p.add_argument(
             "--gateway",
             default=_env("GATEWAY", "127.0.0.1:3434"),
-            help="mock gateway host:port, or pearl-gateway endpoint in live mode",
+            help="mock gateway host:port, or pearl-gateway endpoint (host:port "
+            "or UDS socket path) in live/monitor mode",
         )
         p.add_argument("--network", default=_env("NETWORK", "mock"))
         p.add_argument(

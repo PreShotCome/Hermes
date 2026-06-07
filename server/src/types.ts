@@ -31,6 +31,10 @@ export interface Worker {
   gpuUtil: number;
   /** GPU temperature in °C. */
   gpuTemp: number;
+  /** Whether the worker can reach its gateway. */
+  gatewayOnline: boolean;
+  /** Network difficulty (MAX_TARGET / target) reported by the gateway. */
+  networkDifficulty: number;
 }
 
 /** A single historical stats reading for one worker. */
