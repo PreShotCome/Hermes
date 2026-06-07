@@ -1,0 +1,30 @@
+[project]
+name = "pearl-worker"
+version = "0.1.0"
+description = "Pearl Proof-of-Useful-Work miner (matmul) with live dashboard reporting"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "blake3>=0.4",
+]
+
+[project.optional-dependencies]
+# Live mining additionally needs the official Pearl stack (pearl_mining,
+# pearl-gateway) and, realistically, a CUDA GPU — installed separately from
+# github.com/pearl-research-labs/pearl.
+test = ["pytest>=8"]
+
+[project.scripts]
+pearl-worker = "pearl_worker.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

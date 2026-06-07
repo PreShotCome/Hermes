@@ -1,0 +1,21 @@
+# Node
+node_modules/
+dist/
+*.log
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+build/
+.venv/
+venv/
+
+# Data / local
+data/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store

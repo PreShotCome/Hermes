@@ -1,0 +1,18 @@
+{
+  "name": "pearl-mining-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pearl Proof-of-Useful-Work miner with a live monitoring dashboard",
+  "scripts": {
+    "install:all": "npm --prefix mock-gateway install && npm --prefix server install && npm --prefix dashboard install",
+    "dev:gateway": "npm --prefix mock-gateway run dev",
+    "dev:server": "npm --prefix server run dev",
+    "dev:dashboard": "npm --prefix dashboard run dev",
+    "dev": "concurrently -n gateway,server,dashboard -c cyan,green,magenta \"npm:dev:gateway\" \"npm:dev:server\" \"npm:dev:dashboard\"",
+    "build": "npm --prefix mock-gateway run build && npm --prefix server run build && npm --prefix dashboard run build",
+    "test": "npm --prefix server test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

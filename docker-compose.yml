@@ -1,0 +1,54 @@
+# Brings up the full Pearl mining stack: mock gateway, server, dashboard and one
+# reference worker doing real CPU matmul proof-of-useful-work.
+# Usage: docker compose up --build
+#
+# Then open the dashboard at http://localhost:8080
+#
+# Reference mode does real, locally-verified Pearl work but earns no PRL. To mine
+# for rewards, run a worker in live mode against a real pearld node + pearl-gateway
+# (and a GPU) — see worker/README.md.
+
+services:
+  mock-gateway:
+    build: ./mock-gateway
+    ports:
+      - "3434:3434"
+    restart: unless-stopped
+
+  server:
+    build: ./server
+    ports:
+      - "4000:4000"
+    environment:
+      - DB_PATH=/data/monitor.db
+    volumes:
+      - monitor-data:/data
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        # The browser reaches the server via the host-published port.
+        VITE_SERVER_URL: http://localhost:4000
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  worker:
+    build: ./worker
+    environment:
+      - MINER_MODE=reference
+      - GATEWAY=mock-gateway:3434
+      - NETWORK=mock
+      - SERVER_URL=http://server:4000
+      - WORKER_NAME=docker-worker-1
+    depends_on:
+      - server
+      - mock-gateway
+    restart: unless-stopped
+
+volumes:
+  monitor-data:
