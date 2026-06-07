@@ -25,7 +25,10 @@ export function openDatabase(dbPath: string): Database.Database {
       solutions      INTEGER NOT NULL DEFAULT 0,
       accepted       INTEGER NOT NULL DEFAULT 0,
       rejected       INTEGER NOT NULL DEFAULT 0,
-      uptime_seconds INTEGER NOT NULL DEFAULT 0
+      uptime_seconds INTEGER NOT NULL DEFAULT 0,
+      power_watts    REAL NOT NULL DEFAULT 0,
+      gpu_util       REAL NOT NULL DEFAULT 0,
+      gpu_temp       REAL NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS samples (
       id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,7 +38,10 @@ export function openDatabase(dbPath: string): Database.Database {
       solutions      INTEGER NOT NULL,
       accepted       INTEGER NOT NULL,
       rejected       INTEGER NOT NULL,
-      uptime_seconds INTEGER NOT NULL
+      uptime_seconds INTEGER NOT NULL,
+      power_watts    REAL NOT NULL DEFAULT 0,
+      gpu_util       REAL NOT NULL DEFAULT 0,
+      gpu_temp       REAL NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_samples_worker_ts ON samples (worker_id, ts);
   `);

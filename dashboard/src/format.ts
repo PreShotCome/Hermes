@@ -37,3 +37,40 @@ export function formatUptime(seconds: number): string {
 export function formatNumber(value: number): string {
   return Math.round(value).toLocaleString('en-US');
 }
+
+/** Format a GPU power draw in watts. */
+export function formatWatts(watts: number): string {
+  if (!Number.isFinite(watts) || watts <= 0) {
+    return '—';
+  }
+  if (watts < 1000) {
+    return `${watts.toFixed(0)} W`;
+  }
+  return `${(watts / 1000).toFixed(2)} kW`;
+}
+
+/**
+ * Power efficiency: matmul throughput per watt. This is the number to maximize
+ * to save on electricity — more useful work for the same power.
+ */
+export function formatEfficiency(tops: number, watts: number): string {
+  if (!Number.isFinite(watts) || watts <= 0 || tops <= 0) {
+    return '—';
+  }
+  const topsPerWatt = tops / watts;
+  if (topsPerWatt >= 1) {
+    return `${topsPerWatt.toFixed(2)} TOPS/W`;
+  }
+  if (topsPerWatt >= 0.001) {
+    return `${(topsPerWatt * 1000).toFixed(1)} GOPS/W`;
+  }
+  return `${(topsPerWatt * 1_000_000).toFixed(1)} MOPS/W`;
+}
+
+/** Format a temperature in °C. */
+export function formatTemp(celsius: number): string {
+  if (!Number.isFinite(celsius) || celsius <= 0) {
+    return '—';
+  }
+  return `${celsius.toFixed(0)}°C`;
+}

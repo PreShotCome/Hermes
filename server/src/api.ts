@@ -17,6 +17,9 @@ const heartbeatSchema = z.object({
   accepted: z.coerce.number().int().min(0),
   rejected: z.coerce.number().int().min(0),
   uptimeSeconds: z.coerce.number().int().min(0),
+  powerWatts: z.coerce.number().min(0).default(0),
+  gpuUtil: z.coerce.number().min(0).default(0),
+  gpuTemp: z.coerce.number().default(0),
 });
 
 /** Build the REST API router backed by the given store. */

@@ -16,6 +16,9 @@ export interface Worker {
   accepted: number;
   rejected: number;
   uptimeSeconds: number;
+  powerWatts: number;
+  gpuUtil: number;
+  gpuTemp: number;
 }
 
 export interface Sample {
@@ -25,6 +28,9 @@ export interface Sample {
   accepted: number;
   rejected: number;
   uptimeSeconds: number;
+  powerWatts: number;
+  gpuUtil: number;
+  gpuTemp: number;
 }
 
 export interface Summary {
@@ -34,6 +40,7 @@ export interface Summary {
   totalSolutions: number;
   totalAccepted: number;
   totalRejected: number;
+  totalPowerWatts: number;
 }
 
 /** Base URL of the monitoring server; overridable at build time. */

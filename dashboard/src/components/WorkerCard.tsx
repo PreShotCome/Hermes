@@ -1,5 +1,5 @@
 import type { Worker } from '../api';
-import { formatTops, formatNumber, formatUptime } from '../format';
+import { formatTops, formatNumber, formatUptime, formatWatts, formatEfficiency } from '../format';
 
 export function WorkerCard({
   worker,
@@ -20,7 +20,8 @@ export function WorkerCard({
       <dl className="card-rows">
         <Row label="Status" value={worker.status} />
         <Row label="Device" value={worker.device} />
-        <Row label="Network" value={worker.network} />
+        <Row label="Power" value={formatWatts(worker.powerWatts)} />
+        <Row label="Efficiency" value={formatEfficiency(worker.tops, worker.powerWatts)} />
         <Row label="Solutions" value={formatNumber(worker.solutions)} />
         <Row label="Accepted" value={formatNumber(worker.accepted)} />
         <Row label="Uptime" value={formatUptime(worker.uptimeSeconds)} />

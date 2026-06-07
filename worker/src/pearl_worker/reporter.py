@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 
 from .engine import EngineInfo
+from .power import sample_gpu
 from .stats import Stats
 
 _LOG = logging.getLogger("pearl-worker.reporter")
@@ -90,4 +91,9 @@ class Reporter(threading.Thread):
                 "rejected": snap["rejected"],
                 "uptimeSeconds": self.stats.uptime_seconds(),
             }
+            power = sample_gpu()
+            if power is not None:
+                body["powerWatts"] = power.power_watts
+                body["gpuUtil"] = power.gpu_util
+                body["gpuTemp"] = power.gpu_temp
             _post(f"{self.base}/api/workers/{self._worker_id}/heartbeat", body)

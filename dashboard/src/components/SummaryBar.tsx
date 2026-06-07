@@ -1,5 +1,5 @@
 import type { Summary } from '../api';
-import { formatTops, formatNumber } from '../format';
+import { formatTops, formatNumber, formatWatts, formatEfficiency } from '../format';
 
 const EMPTY: Summary = {
   workerCount: 0,
@@ -8,6 +8,7 @@ const EMPTY: Summary = {
   totalSolutions: 0,
   totalAccepted: 0,
   totalRejected: 0,
+  totalPowerWatts: 0,
 };
 
 export function SummaryBar({ summary }: { summary: Summary | null }) {
@@ -15,6 +16,12 @@ export function SummaryBar({ summary }: { summary: Summary | null }) {
   return (
     <div className="summary">
       <Stat label="Total throughput" value={formatTops(s.totalTops)} accent />
+      <Stat label="Fleet power" value={formatWatts(s.totalPowerWatts)} />
+      <Stat
+        label="Efficiency"
+        value={formatEfficiency(s.totalTops, s.totalPowerWatts)}
+        accent
+      />
       <Stat label="Workers online" value={`${s.onlineCount} / ${s.workerCount}`} />
       <Stat label="Solutions found" value={formatNumber(s.totalSolutions)} />
       <Stat label="Blocks accepted" value={formatNumber(s.totalAccepted)} />

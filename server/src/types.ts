@@ -25,6 +25,12 @@ export interface Worker {
   /** Solutions rejected. */
   rejected: number;
   uptimeSeconds: number;
+  /** GPU board power draw in watts (0 if no GPU telemetry). */
+  powerWatts: number;
+  /** GPU utilization percentage. */
+  gpuUtil: number;
+  /** GPU temperature in °C. */
+  gpuTemp: number;
 }
 
 /** A single historical stats reading for one worker. */
@@ -35,6 +41,9 @@ export interface Sample {
   accepted: number;
   rejected: number;
   uptimeSeconds: number;
+  powerWatts: number;
+  gpuUtil: number;
+  gpuTemp: number;
 }
 
 /** Fleet-wide aggregate across all known workers. */
@@ -45,4 +54,6 @@ export interface Summary {
   totalSolutions: number;
   totalAccepted: number;
   totalRejected: number;
+  /** Total GPU power draw across online workers (watts). */
+  totalPowerWatts: number;
 }

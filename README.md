@@ -173,7 +173,9 @@ npm --prefix server test                          # store, aggregation, stale de
 4. A tile whose `BLAKE3(transcript, key) <= target` is a solution; it is
    verified locally (the denoised product equals A·B) and submitted to the gateway.
 5. Every 5 seconds it posts a heartbeat (TOPS, solutions, accepted, rejected,
-   uptime) to the monitoring server.
+   uptime, plus GPU power/util/temp via `nvidia-smi` when available) to the
+   monitoring server. The dashboard shows fleet power and **efficiency
+   (TOPS/W)** — the number to maximize to save on electricity.
 
 In **live** mode steps 2–4 are performed by the official `pearl_mining` /
 `pearl-gateway` stack (GPU GEMM + Plonky2 ZK proof + block submission).

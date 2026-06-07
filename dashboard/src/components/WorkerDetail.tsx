@@ -1,6 +1,13 @@
 import { useEffect } from 'react';
 import type { Worker } from '../api';
-import { formatTops, formatNumber, formatUptime } from '../format';
+import {
+  formatTops,
+  formatNumber,
+  formatUptime,
+  formatWatts,
+  formatEfficiency,
+  formatTemp,
+} from '../format';
 import { RateChart } from './RateChart';
 
 export function WorkerDetail({
@@ -41,11 +48,17 @@ export function WorkerDetail({
 
         <div className="detail-stats">
           <Tile label="Throughput" value={formatTops(worker.tops)} accent />
+          <Tile label="Power" value={formatWatts(worker.powerWatts)} />
+          <Tile
+            label="Efficiency"
+            value={formatEfficiency(worker.tops, worker.powerWatts)}
+            accent
+          />
+          <Tile label="GPU util" value={worker.gpuUtil > 0 ? `${worker.gpuUtil.toFixed(0)}%` : '—'} />
+          <Tile label="GPU temp" value={formatTemp(worker.gpuTemp)} />
           <Tile label="Mode" value={worker.mode} />
-          <Tile label="Status" value={worker.status} />
           <Tile label="Solutions" value={formatNumber(worker.solutions)} />
           <Tile label="Accepted" value={formatNumber(worker.accepted)} />
-          <Tile label="Rejected" value={formatNumber(worker.rejected)} />
           <Tile label="Uptime" value={formatUptime(worker.uptimeSeconds)} />
         </div>
 

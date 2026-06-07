@@ -19,6 +19,9 @@ export interface HeartbeatInput {
   accepted: number;
   rejected: number;
   uptimeSeconds: number;
+  powerWatts?: number;
+  gpuUtil?: number;
+  gpuTemp?: number;
 }
 
 interface WorkerRow {
@@ -36,6 +39,9 @@ interface WorkerRow {
   accepted: number;
   rejected: number;
   uptime_seconds: number;
+  power_watts: number;
+  gpu_util: number;
+  gpu_temp: number;
 }
 
 /**
@@ -71,6 +77,9 @@ export class Store extends EventEmitter {
       accepted: row.accepted,
       rejected: row.rejected,
       uptimeSeconds: row.uptime_seconds,
+      powerWatts: row.power_watts,
+      gpuUtil: row.gpu_util,
+      gpuTemp: row.gpu_temp,
     };
   }
 
@@ -101,11 +110,15 @@ export class Store extends EventEmitter {
   /** Apply a heartbeat; returns null if the worker id is unknown. */
   heartbeat(id: string, input: HeartbeatInput): Worker | null {
     const now = Date.now();
+    const powerWatts = input.powerWatts ?? 0;
+    const gpuUtil = input.gpuUtil ?? 0;
+    const gpuTemp = input.gpuTemp ?? 0;
     const result = this.db
       .prepare(
         `UPDATE workers
             SET last_seen = ?, status = 'online', tops = ?,
-                solutions = ?, accepted = ?, rejected = ?, uptime_seconds = ?
+                solutions = ?, accepted = ?, rejected = ?, uptime_seconds = ?,
+                power_watts = ?, gpu_util = ?, gpu_temp = ?
           WHERE id = ?`,
       )
       .run(
@@ -115,6 +128,9 @@ export class Store extends EventEmitter {
         input.accepted,
         input.rejected,
         input.uptimeSeconds,
+        powerWatts,
+        gpuUtil,
+        gpuTemp,
         id,
       );
     if (result.changes === 0) {
@@ -123,8 +139,9 @@ export class Store extends EventEmitter {
     this.db
       .prepare(
         `INSERT INTO samples
-           (worker_id, ts, tops, solutions, accepted, rejected, uptime_seconds)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           (worker_id, ts, tops, solutions, accepted, rejected, uptime_seconds,
+            power_watts, gpu_util, gpu_temp)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -134,6 +151,9 @@ export class Store extends EventEmitter {
         input.accepted,
         input.rejected,
         input.uptimeSeconds,
+        powerWatts,
+        gpuUtil,
+        gpuTemp,
       );
     this.emit('change');
     return this.getWorker(id);
@@ -157,7 +177,9 @@ export class Store extends EventEmitter {
   getHistory(id: string, sinceMs: number): Sample[] {
     return this.db
       .prepare(
-        `SELECT ts, tops, solutions, accepted, rejected, uptime_seconds AS uptimeSeconds
+        `SELECT ts, tops, solutions, accepted, rejected,
+                uptime_seconds AS uptimeSeconds,
+                power_watts AS powerWatts, gpu_util AS gpuUtil, gpu_temp AS gpuTemp
            FROM samples
           WHERE worker_id = ? AND ts >= ?
           ORDER BY ts ASC`,
@@ -175,6 +197,7 @@ export class Store extends EventEmitter {
       totalSolutions: workers.reduce((sum, w) => sum + w.solutions, 0),
       totalAccepted: workers.reduce((sum, w) => sum + w.accepted, 0),
       totalRejected: workers.reduce((sum, w) => sum + w.rejected, 0),
+      totalPowerWatts: online.reduce((sum, w) => sum + w.powerWatts, 0),
     };
   }
 
