@@ -51,6 +51,7 @@ class ReferenceEngine:
         self.cfg = pouw.MiningConfig(common_dim=k, rank=rank)
         self.noise_gen = pouw.NoiseGenerator(noise_rank=rank)
         self.rng = np.random.default_rng(seed)
+        self._verified = False
 
     @property
     def info(self) -> EngineInfo:
@@ -67,10 +68,17 @@ class ReferenceEngine:
         a, b = self._random_data()
         seed_a, seed_b = pouw.commitment(a, b, job.header_bytes, self.cfg)
         noise = self.noise_gen.generate(seed_a, seed_b, self.m, self.k, self.n)
-        c, solution = pouw.noisy_gemm_pow(a, b, noise, seed_a, job.target, self.cfg)
-        # Correctness check: the noised computation must reproduce the plain matmul.
-        if not np.array_equal(c, a.astype(np.int32) @ b.astype(np.int32)):
-            raise RuntimeError("noisy GEMM did not reproduce A @ B — engine bug")
+        # Verify the noised computation reproduces the plain matmul exactly ONCE
+        # at startup; recomputing the product every attempt would burn ~3x the
+        # matmuls (and the energy) for no benefit once the engine is trusted.
+        compute_product = not self._verified
+        product, solution = pouw.noisy_gemm_pow(
+            a, b, noise, seed_a, job.target, self.cfg, compute_product=compute_product
+        )
+        if compute_product:
+            if not np.array_equal(product, a.astype(np.int32) @ b.astype(np.int32)):
+                raise RuntimeError("noisy GEMM did not reproduce A @ B — engine bug")
+            self._verified = True
         self.stats.add_matmul_ops(pouw.matmul_ops(self.m, self.n, self.k))
         return solution
 

@@ -26,7 +26,7 @@ def _problem(seed: int = 0, m: int = 256, n: int = 256, k: int = 256, rank: int 
 
 def test_noised_gemm_reproduces_plain_matmul():
     a, b, cfg, _header, seed_a, _seed_b, noise = _problem()
-    c, _ = pouw.noisy_gemm_pow(a, b, noise, seed_a, pouw.MAX_TARGET, cfg)
+    c, _ = pouw.noisy_gemm_pow(a, b, noise, seed_a, pouw.MAX_TARGET, cfg, compute_product=True)
     assert np.array_equal(c, a.astype(np.int32) @ b.astype(np.int32))
 
 

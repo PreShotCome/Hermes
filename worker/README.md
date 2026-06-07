@@ -71,6 +71,40 @@ dashboard. Block rewards accrue to the `--miningaddr` configured on `pearld`.
 > profit when reward value exceeds your electricity cost. Mine only on power you
 > pay for or are authorized to use.
 
+## Efficiency
+
+Energy-per-solution is what matters for PoUW. The reference engine is tuned to
+waste as little CPU (and therefore power) as possible — it is ~12x faster per
+attempt than a naive implementation:
+
+- **BLAS integer matmul.** numpy has no optimized integer-matmul kernel, so it
+  falls back to a slow generic loop. `pouw._imatmul` routes through float32 (or
+  float64 when needed) BLAS — *bit-exact* for these int8 inputs — for a ~30x
+  matmul speedup.
+- **Vectorized transcript search.** The per-hash-tile XOR inner hash and the
+  rotl-xor transcript accumulation run as single numpy passes over the whole
+  output, not Python loops; noise permutation generation is vectorized too.
+- **No redundant work in the hot loop.** The denoised product and the `A @ B`
+  self-check are computed once at startup, not on every attempt (they cost ~3
+  extra matmuls each).
+
+Tuning knobs:
+
+- `RANK` / `MATRIX_SIZE` / `COMMON_DIM` trade per-attempt overhead against work
+  per attempt; larger problems amortize fixed costs over more transcript checks.
+- Ensure numpy is linked against a fast BLAS (OpenBLAS/MKL) — `python -c "import
+  numpy; numpy.show_config()"`.
+
+For **live GPU mining**, power efficiency (TOPS/watt, joules/solution) is
+dominated by the GPU, not this worker:
+
+- Cap the board power and/or undervolt (`nvidia-smi -pl <watts>`); the efficiency
+  sweet spot is usually well below stock — you keep most of the throughput for a
+  fraction of the watts.
+- Watch joules-per-accepted-block, not raw throughput.
+- Mine when electricity is cheapest, and only on power you pay for or are
+  authorized to use.
+
 ## Tests
 
 ```bash

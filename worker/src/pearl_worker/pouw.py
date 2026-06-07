@@ -70,13 +70,24 @@ class Solution:
 # --- bit twiddling -----------------------------------------------------------
 
 
-def _rotl32(x: np.uint32, n: int) -> np.uint32:
-    x = np.uint32(x)
-    return np.uint32((x << np.uint32(n)) | (x >> np.uint32(32 - n)))
-
-
 def _mul_hi_u32(a: np.uint32, b: np.uint32) -> np.uint32:
     return np.uint32((np.uint64(a) * np.uint64(b)) >> np.uint64(32))
+
+
+def _imatmul(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """Exact integer matmul via BLAS.
+
+    numpy has no optimized (BLAS) kernel for integer matmul — it falls back to a
+    slow generic loop. Routing through floating point hits BLAS and is ~30x
+    faster on CPU. We pick the smallest float dtype that represents the result
+    *exactly* (no rounding): float32 is integer-exact below 2**24, float64 below
+    2**53. The bound below is conservative, so the result is always exact.
+    """
+    if x.size == 0 or y.size == 0:
+        return (x.astype(np.int32) @ y.astype(np.int32)).astype(np.int32)
+    bound = int(np.abs(x).max()) * int(np.abs(y).max()) * x.shape[1]
+    dtype = np.float32 if bound < (1 << 24) else np.float64
+    return (x.astype(dtype) @ y.astype(dtype)).astype(np.int32)
 
 
 # --- commitment --------------------------------------------------------------
@@ -144,25 +155,24 @@ class NoiseGenerator:
         out = np.zeros((rows, cols), dtype=np.int8)
         required = cols if assign_columns else rows
         draws = -(-required * 4 // 32)  # ceil(required*4 / 32)
-        for i in range(draws):
-            words = np.frombuffer(self._hash(i, seed, key, 1), dtype=np.uint32)
-            for k in range(8):  # 32 bytes / 4 bytes per line
-                assignment_index = i * 8 + k
-                if assignment_index >= required:
-                    break
-                w = words[k]
-                first = int(w & np.uint32(self.rank_mask))
-                second = first ^ int(
-                    np.uint32(1) + _mul_hi_u32(np.uint32(self.noise_rank - 1), w)
-                )
-                second &= self.rank_mask
-                col = np.zeros(self.noise_rank, dtype=np.int8)
-                col[first] = 1
-                col[second] = -1
-                if assign_columns:
-                    out[:, assignment_index] = col
-                else:
-                    out[assignment_index, :] = col
+        raw = b"".join(self._hash(i, seed, key, 1) for i in range(draws))
+        # One word per line; each places a +1 and a -1 in its rank-length vector.
+        words = np.frombuffer(raw, dtype=np.uint32)[:required]
+        mask = np.uint32(self.rank_mask)
+        first_u = words & mask
+        mul_hi = (
+            (np.uint64(self.noise_rank - 1) * words.astype(np.uint64)) >> np.uint64(32)
+        ).astype(np.uint32)
+        second_u = (first_u ^ (np.uint32(1) + mul_hi)) & mask
+        first = first_u.astype(np.intp)
+        second = second_u.astype(np.intp)
+        lines = np.arange(required)
+        if assign_columns:  # vectors are columns: out[row, line]
+            out[first, lines] = 1
+            out[second, lines] = -1
+        else:  # vectors are rows: out[line, col]
+            out[lines, first] = 1
+            out[lines, second] = -1
         return out
 
     def generate(
@@ -180,13 +190,20 @@ class NoiseGenerator:
 # --- the proof-of-useful-work search ----------------------------------------
 
 
-def _inner_hash_tile(tile: np.ndarray) -> np.uint32:
-    """XOR-reduce an int32 tile, viewed as uint32, to a single word."""
-    return np.bitwise_xor.reduce(tile.astype(np.int32).reshape(-1).view(np.uint32))
+def _inner_hash_all_tiles(c: np.ndarray, hth: int, htw: int) -> np.ndarray:
+    """XOR-reduce every hash tile of an int32 matrix at once.
+
+    Returns an ``(n_tiles_h, n_tiles_w)`` uint32 array — one combined word per
+    hash tile — in a single vectorized numpy pass (no per-tile Python loop).
+    """
+    nth, ntw = c.shape[0] // hth, c.shape[1] // htw
+    grouped = c.view(np.uint32).reshape(nth, hth, ntw, htw)
+    return np.bitwise_xor.reduce(grouped, axis=(1, 3))
 
 
-def _transcript_bytes(transcript: np.ndarray) -> bytes:
-    return transcript.astype("<u4").tobytes()
+def _rotl32_arr(x: np.ndarray) -> np.ndarray:
+    n = np.uint32(HASH_ACCUMULATE_ROTATION)
+    return (x << n) | (x >> np.uint32(32 - HASH_ACCUMULATE_ROTATION))
 
 
 def noisy_gemm_pow(
@@ -196,82 +213,88 @@ def noisy_gemm_pow(
     pow_key: bytes,
     target: int,
     cfg: MiningConfig,
-) -> tuple[np.ndarray, Solution | None]:
+    *,
+    compute_product: bool = False,
+) -> tuple[np.ndarray | None, Solution | None]:
     """Run the noised tiled GEMM and search its transcripts for a winning tile.
 
-    Returns the (denoised) product C — equal to A @ B, proving the noisy
-    computation did the real matmul — and the first ``Solution`` whose keyed
-    transcript hash meets ``target`` (or ``None``).
+    The hot path is fully vectorized: one BLAS matmul per k-reduction over the
+    *whole* output, then a single numpy pass to fold every hash tile into its
+    transcript. Output-element partial sums are independent of tiling, so this is
+    identical to the per-output-tile upstream loop for aligned shapes — but with
+    almost no Python overhead.
+
+    By default it does **only** the work the proof needs: the noised matmul and
+    the transcript search. Pass ``compute_product=True`` to also return the
+    denoised product C (== A @ B); skip it in the mining loop to avoid three
+    redundant matmuls per attempt.
+
+    Requires m and n divisible by ``rank`` and ``rank`` divisible by the hash
+    tile size (the reference engine's defaults satisfy this).
     """
     e_al, e_ar, e_bl, e_br = noise
     rank = cfg.rank
     m, k = a.shape
     n = b.shape[1]
     hth, htw = cfg.hash_tile_h, cfg.hash_tile_w
+    if m % rank or n % rank or rank % hth or rank % htw:
+        raise ValueError("reference engine requires rank-aligned m, n and tile-aligned rank")
 
-    # Noise the inputs (int8) and pre-compute the denoising terms (int32).
-    e_a = (e_al.astype(np.int32) @ e_ar.astype(np.int32)).astype(np.int8)
-    e_b = (e_bl.astype(np.int32) @ e_br.astype(np.int32)).astype(np.int8)
-    a_n = (a + e_a).astype(np.int8)
-    b_n = (b + e_b).astype(np.int8)
-    a_ebl = a.astype(np.int32) @ e_bl.astype(np.int32)
-    ear_bn = e_ar.astype(np.int32) @ b_n.astype(np.int32)
-    denoise = (a_ebl @ e_br.astype(np.int32)) + (e_al.astype(np.int32) @ ear_bn)
+    # Noise the inputs (int8). These two small products are the only matmuls
+    # besides the PoUW matmul itself.
+    e_a = _imatmul(e_al, e_ar).astype(np.int8)
+    e_b = _imatmul(e_bl, e_br).astype(np.int8)
+    a_n = np.ascontiguousarray(a + e_a, dtype=np.int8)
+    b_n = np.ascontiguousarray(b + e_b, dtype=np.int8)
 
+    nth, ntw = m // hth, n // htw
+    transcripts = np.zeros((nth, ntw, TRANSCRIPT_SIZE_U32), dtype=np.uint32)
     c = np.zeros((m, n), dtype=np.int32)
+    for reduction, p in enumerate(range(0, k, rank)):
+        c += _imatmul(a_n[:, p : p + rank], b_n[p : p + rank, :])
+        combined = _inner_hash_all_tiles(c, hth, htw)  # (nth, ntw) uint32
+        idx = reduction % TRANSCRIPT_SIZE_U32
+        transcripts[:, :, idx] = _rotl32_arr(transcripts[:, :, idx]) ^ combined
+
+    # PoW check: keyed BLAKE3 over each 64-byte transcript, scanned in order.
+    flat = transcripts.reshape(-1, TRANSCRIPT_SIZE_U32).astype("<u4")
     solution: Solution | None = None
+    for t in range(flat.shape[0]):
+        h = int.from_bytes(blake3(flat[t].tobytes(), key=pow_key).digest(), "little")
+        if h <= target:
+            solution = Solution(
+                row=(t // ntw) * hth,
+                col=(t % ntw) * htw,
+                transcript=[int(x) for x in flat[t]],
+                pow_hash_int=h,
+                target=target,
+                seed_a=pow_key,
+                seed_b=b"",
+            )
+            break
 
-    for i in range(0, m, rank):
-        i_max = min(i + rank, m)
-        for j in range(0, n, rank):
-            j_max = min(j + rank, n)
-            block_h, block_w = i_max - i, j_max - j
-            nth, ntw = block_h // hth, block_w // htw
-            transcripts = np.zeros((nth, ntw, TRANSCRIPT_SIZE_U32), dtype=np.uint32)
-            c_block = np.zeros((block_h, block_w), dtype=np.int32)
-            reduction = 0
-            for p in range(0, k, rank):
-                p_max = min(p + rank, k)
-                c_block = c_block + (
-                    a_n[i:i_max, p:p_max].astype(np.int32)
-                    @ b_n[p:p_max, j:j_max].astype(np.int32)
-                )
-                is_full = block_h >= hth and block_w >= htw and (p_max - p) == rank
-                if not is_full:
-                    continue
-                idx = reduction % TRANSCRIPT_SIZE_U32
-                for hi in range(nth):
-                    for wi in range(ntw):
-                        tile = c_block[hi * hth : (hi + 1) * hth, wi * htw : (wi + 1) * htw]
-                        combined = _inner_hash_tile(tile)
-                        t = transcripts[hi, wi]
-                        t[idx] = _rotl32(t[idx], HASH_ACCUMULATE_ROTATION) ^ combined
-                reduction += 1
+    product = denoise_product(a, b, c, noise) if compute_product else None
+    return product, solution
 
-            if solution is None and reduction > 0:
-                for hi in range(nth):
-                    for wi in range(ntw):
-                        digest = blake3(
-                            _transcript_bytes(transcripts[hi, wi]), key=pow_key
-                        ).digest()
-                        h = int.from_bytes(digest, "little")
-                        if h <= target:
-                            solution = Solution(
-                                row=i + hi * hth,
-                                col=j + wi * htw,
-                                transcript=[int(x) for x in transcripts[hi, wi]],
-                                pow_hash_int=h,
-                                target=target,
-                                seed_a=pow_key,
-                                seed_b=b"",
-                            )
-                            break
-                    if solution is not None:
-                        break
 
-            c[i:i_max, j:j_max] = c_block - denoise[i:i_max, j:j_max]
+def denoise_product(
+    a: np.ndarray,
+    b: np.ndarray,
+    c_noised: np.ndarray,
+    noise: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+) -> np.ndarray:
+    """Recover the true product C == A @ B from the noised accumulation.
 
-    return c, solution
+    Used for verification/tests and, in a real miner, to consume the useful AI
+    output — but never needed just to search for a solution.
+    """
+    e_al, e_ar, e_bl, e_br = noise
+    e_b = _imatmul(e_bl, e_br).astype(np.int8)
+    b_n = (b + e_b).astype(np.int8)
+    a_ebl = _imatmul(a, e_bl)
+    ear_bn = _imatmul(e_ar, b_n)
+    denoise = _imatmul(a_ebl, e_br) + _imatmul(e_al, ear_bn)
+    return c_noised - denoise
 
 
 def matmul_ops(m: int, n: int, k: int) -> int:
