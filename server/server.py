@@ -22,15 +22,13 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any
 
-from odds_client import OddsClient, american_to_decimal
-from prediction_engine import PredictionEngine, Prediction
 from risk_engine import RiskLimits, RiskState, validate_bet
+from sharp_client import SharpClient
 from value_engine import ValueBet, find_value_bets
 
 
 DATA_DIR    = os.path.join(os.path.dirname(__file__), 'data')
 DB_PATH     = os.path.join(DATA_DIR, 'hermes.db')
-STATE_PATH  = os.path.join(DATA_DIR, 'ratings.json')
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     'paused':           False,
@@ -124,8 +122,7 @@ class HermesServer:
         os.makedirs(DATA_DIR, exist_ok=True)
         with _connect() as conn:
             _init_db(conn)
-        self.odds = OddsClient()
-        self.predictor = PredictionEngine(STATE_PATH)
+        self.sharp = SharpClient()
         self._settings = self._load_settings()
         self.starting_bankroll = float(os.getenv('STARTING_BANKROLL', '1000') or 1000.0)
         self._scan_lock = asyncio.Lock()
@@ -203,7 +200,7 @@ class HermesServer:
         return {
             'mode':           'paper',  # always paper — we never place real bets
             'paused':         bool(self._settings.get('paused')),
-            'odds_live':      self.odds.live,
+            'sharp_api_live': self.sharp.live,
             'last_scan_at':   self._last_scan_at,
             'last_scan_found': self._last_scan_found,
         }
@@ -220,17 +217,13 @@ class HermesServer:
     # ── scan / picks ─────────────────────────────────────────────────────────
 
     async def scan(self) -> dict[str, Any]:
-        """Fetch markets, run the model, store fresh value picks."""
+        """Pull FanDuel+Pinnacle pairs from SharpAPI, find edges, store picks."""
         async with self._scan_lock:
             sports = list(self._settings.get('sports') or [])
-            markets = await self.odds.fetch_markets(sports)
-            predictions: dict[str, Prediction] = {
-                m.event_id: self.predictor.predict(m.sport, m.home_team, m.away_team)
-                for m in markets
-            }
+            pairs = await self.sharp.fetch_paired_markets(sports)
             bankroll = self.bankroll()['balance']
             value_bets = find_value_bets(
-                markets, predictions,
+                pairs,
                 bankroll=bankroll,
                 min_edge=float(self._settings['min_edge']),
                 kelly_fraction=float(self._settings['kelly_fraction']),
@@ -241,7 +234,7 @@ class HermesServer:
             self._last_scan_found = len(value_bets)
             return {
                 'found':           len(value_bets),
-                'markets_scanned': len(markets),
+                'markets_scanned': len(pairs),
                 'sports':          sports,
             }
 
@@ -371,14 +364,6 @@ class HermesServer:
                 (result, now, payout, bet_id),
             )
             conn.commit()
-
-        # Update Elo when we know the outcome. Push doesn't move ratings.
-        if result in ('won', 'lost'):
-            home_won = (result == 'won' and row['side'] == 'home') or \
-                       (result == 'lost' and row['side'] == 'away')
-            self.predictor.update_after_result(
-                row['sport'], row['home_team'], row['away_team'], home_won,
-            )
 
         self._snapshot_equity()
         return {'id': bet_id, 'payout': payout, 'status': result}

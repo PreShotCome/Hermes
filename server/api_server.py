@@ -225,7 +225,7 @@ def _oracle_context(h: HermesServer) -> str:
         f'day P&L ${bk["day_pnl"]:.2f}  open {bk["open_bets"]}  '
         f'win rate {bk["win_rate"]*100:.1f}%',
         f'Mode {st["mode"]}  paused={st["paused"]}  '
-        f'odds_live={st["odds_live"]}  sports={settings.get("sports")}',
+        f'sharp_api_live={st["sharp_api_live"]}  sports={settings.get("sports")}',
         f'Risk: kelly={settings["kelly_fraction"]}  '
         f'min_edge={settings["min_edge"]}  '
         f'max_bet_pct={settings["max_bet_pct"]}  '
