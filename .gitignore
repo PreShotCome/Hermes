@@ -1,21 +1,48 @@
-# Node
-node_modules/
-dist/
-*.log
-npm-debug.log*
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+android/.gradle/
+android/app/debug
+android/app/profile
+android/app/release
+android/local.properties
+android/key.properties
+*.iml
+.idea/
+.vscode/
+
+# Firebase
+google-services.json
+GoogleService-Info.plist
+firebase_options.dart
+firebase-key.json
+*-firebase-adminsdk-*.json
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.egg-info/
-.pytest_cache/
-build/
 .venv/
 venv/
+.env
+.env.*
+!.env.example
 
-# Data / local
-data/
-*.db
-*.db-wal
-*.db-shm
+# Server data
+server/data/
+server/*.db
+server/*.sqlite*
+server/logs/
+
+# OS
 .DS_Store
+Thumbs.db

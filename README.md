@@ -1,192 +1,95 @@
-# Pearl Mining App
+# Hermes
 
-A [Pearl](https://pearlresearch.ai/) Proof-of-Useful-Work miner plus a live
-monitoring dashboard, in one monorepo. A worker performs Pearl's matmul PoUW,
-reports its stats to a server, and a web dashboard shows every worker in one
-view.
+> *Swift counsel for every wager.*
+
+A model-driven sports betting app, modeled on the Proteus
+(trading-bot-app) shape. A Python server runs the prediction engine,
+finds value bets against bookmaker lines, and proposes wagers sized by
+the Kelly criterion. A Flutter mobile app is the control surface.
 
 ```
-worker (Python) ──mines──▶ gateway (real pearl-gateway, or bundled mock)
-      │
-      └──heartbeats──▶ server (Node/TS, REST + WebSocket + SQLite)
-                              │
-                              └──live feed──▶ dashboard (React PWA)
+odds API ──▶ server (FastAPI + SQLite)
+             │  ├── prediction_engine (Elo)
+             │  ├── value_engine      (Kelly sizing)
+             │  └── risk_engine       (validate_bet — no override path)
+             │
+             └──REST──▶ Flutter app (Dashboard / Picks / History / Controls / Settings / Chat)
 ```
-
-Built on the proven worker → server → dashboard → mock shape, adapted from the
-DwarfSimulator mining framework to Pearl's GPU/matmul PoUW.
 
 ## Read this first — honest expectations
 
-- **Pearl is Proof-of-*Useful*-Work.** Instead of hashing nonces, a miner runs a
-  large int8 matrix multiplication (the core op of AI inference), accumulates a
-  keyed-BLAKE3 transcript over the output tiles, and wins a block when a tile's
-  transcript hash falls below the target. See the
-  [paper](https://arxiv.org/abs/2504.09971) and
-  [github.com/pearl-research-labs/pearl](https://github.com/pearl-research-labs/pearl).
-- **Earning PRL requires real hardware you control.** A synced `pearld` node, a
-  wallet/mining address, `pearl-gateway`, and realistically a CUDA GPU. The
-  worker's **live** mode drives that stack; see [Live mining](#live-mining).
-- **Reference mode earns nothing — by design.** It does *real, locally-verified*
-  Pearl matmul work on any CPU so you can run, test and demo the whole system
-  with zero setup, but it does not submit ZK proofs to a chain.
-- **Profitability is thin and declining.** You only profit when reward value
-  exceeds your electricity cost. **Only mine on power you pay for or are
-  explicitly authorized to use.**
+- **Paper mode is the default and the only mode shipped.** Hermes records
+  proposed wagers in a local ledger; it does not place real bets with a
+  sportsbook. Treating sports markets like a free ATM is how bankrolls die.
+- **Edges are thin.** Sportsbook vig is ~4.5% on standard -110 lines. A
+  model has to beat ~52.4% on point-spread bets just to break even before
+  any commission. The value engine only surfaces bets above a configurable
+  edge floor.
+- **Bankroll discipline is non-negotiable.** Every bet runs through
+  `risk_engine.validate_bet`. Block means block — no override path. See
+  `server/risk_engine.py`. This mirrors Proteus's `validate_trade` rule.
+- **Don't bet what you can't lose.** Variance in sports betting is brutal.
+  The Kelly fraction in `value_engine` defaults to ¼-Kelly for a reason.
 
 ## Repository layout
 
 | Path | Stack | Purpose |
 |------|-------|---------|
-| `worker/` | Python | Pearl matmul PoUW miner (reference CPU engine + live adapter) |
-| `server/` | Node / TypeScript | Aggregates worker stats; REST + WebSocket; SQLite |
-| `dashboard/` | React + Vite | Installable PWA showing all workers live |
-| `mock-gateway/` | Node / TypeScript | Minimal mock Pearl gateway for zero-config local runs |
+| `lib/` | Flutter / Dart | Mobile app (control surface + dashboard) |
+| `server/` | Python | API + prediction model + value detection + bot loop |
+| `pubspec.yaml` | — | Flutter project manifest |
 
-## Quick start (Docker — recommended)
+## Quick start
 
-Requires Docker with Compose.
-
-```bash
-docker compose up --build
-```
-
-This starts the mock gateway, the server, the dashboard, and one reference
-worker mining against the mock gateway. Then open:
-
-- **Dashboard:** http://localhost:8080
-- **Server API:** http://localhost:4000/health
-
-You should see `docker-worker-1` appear within a few seconds, its throughput
-(TOPS) climb above zero, and solutions accumulate.
-
-Stop with `Ctrl+C`; `docker compose down` removes the containers. Stats history
-is kept in the `monitor-data` volume.
-
-## Quick start (native)
-
-Prerequisites: Node.js 20+, Python 3.11+.
-
-In separate terminals:
+### Backend
 
 ```bash
-# 1. Install JS dependencies (once)
-npm run install:all
-
-# 2. Mock gateway + server + dashboard together
-npm run dev
-
-# 3. The worker (Python)
-cd worker
-pip install -e .
-pearl-worker
+cd server
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env       # configure ODDS_API_KEY (or leave blank for mock data)
+./start.sh                 # or: uvicorn api_server:app --host 0.0.0.0 --port 8000
 ```
 
-Defaults make the worker connect to the local mock gateway (`127.0.0.1:3434`)
-and report to the local server (`http://127.0.0.1:4000`). The dashboard dev
-server runs at http://localhost:5173.
+The server is paper-mode and uses mocked odds data when `ODDS_API_KEY` is
+unset, so you can run end-to-end with no credentials.
 
-## Running multiple workers
-
-Each worker is an independent process — run as many as you like, on one machine
-or across several devices, and they all appear on the dashboard. Give each a
-unique name:
+### App
 
 ```bash
-WORKER_NAME=living-room-pc pearl-worker
-WORKER_NAME=laptop SERVER_URL=http://192.168.1.10:4000 pearl-worker
+flutter pub get
+flutter run
 ```
 
-Point `SERVER_URL` at the machine running the server when mining from other
-devices. With Docker, scale the worker service:
+Edit `lib/config.dart` to point at your backend before running on a device.
 
-```bash
-docker compose up --build --scale worker=3
-```
+## Key files
 
-## Live mining
+| File | Purpose |
+|------|---------|
+| `lib/main.dart` | App entry, brand colors (`HermesColors`), `AuthGate`, `MainShell` |
+| `lib/services/api_service.dart` | All backend calls |
+| `lib/services/auth_service.dart` | Firebase Auth (email + Google) |
+| `lib/screens/dashboard_screen.dart` | Bankroll, today's picks, P&L curve |
+| `lib/screens/picks_screen.dart` | Current value bets from the model |
+| `lib/screens/history_screen.dart` | Settled-bet ledger |
+| `lib/screens/controls_screen.dart` | Bot pause, Kelly fraction, daily loss limit, sport filters |
+| `lib/screens/settings_screen.dart` | Backend URL, account, sign-out |
+| `lib/screens/chat_screen.dart` | AI assistant (BYOK Anthropic key) |
+| `server/api_server.py` | FastAPI routes |
+| `server/server.py` | Bot loop: fetch odds → predict → find value → size → validate → record |
+| `server/odds_client.py` | The Odds API client (+ mock data) |
+| `server/prediction_engine.py` | Elo-based outcome model |
+| `server/value_engine.py` | Kelly criterion + edge floor |
+| `server/risk_engine.py` | `validate_bet` — bankroll, daily loss, max bet, sanity |
 
-CPU/reference mode never earns. To mine real PRL, run a worker in `live` mode
-against the official Pearl stack on hardware you control:
+## Safety rule (from `docs/research/sports-trading-app-refs.md`)
 
-1. **Run a synced `pearld` node** with `--miningaddr=<your-taproot-address>`
-   (create the wallet/address with `oyster` + `prlctl getnewaddress`).
-2. **Build `pearl_mining`** (`maturin develop --release`) and **run
-   `pearl-gateway`** pointed at the node — it exposes a mining socket
-   (`/tmp/pearlgw.sock` or TCP `:8337`).
-3. Run a GPU miner (`vllm-miner`) for competitive throughput.
-4. Start a live worker so it shows up on this dashboard:
+> Every order through a `validate_trade`-style gate, no override path, and
+> no third-party repo touches a real key or funded wallet until it's been
+> read end to end.
 
-   ```bash
-   pearl-worker --mode live --network mainnet \
-     --gateway /tmp/pearlgw.sock \
-     --wallet-address <your-taproot-address> \
-     --server-url http://127.0.0.1:4000
-   ```
-
-Block rewards accrue to the mining address configured on `pearld`. See
-[`worker/README.md`](worker/README.md) for full details, and
-[`docs/windows-mining.md`](docs/windows-mining.md) for a complete Windows + RTX
-3060 walkthrough with helper scripts.
-
-To watch a rig whose mining is done by the official `vllm-miner` (rather than
-this worker), run the worker in **monitor mode** — it reports the rig's GPU power
-and efficiency to this dashboard without doing its own compute:
-
-```bash
-pearl-worker --mode monitor --network mainnet --gateway 127.0.0.1:8337 \
-  --worker-name rtx3060-rig --server-url http://127.0.0.1:4000
-```
-
-## Worker configuration
-
-See the table in [`worker/README.md`](worker/README.md). All flags are also
-settable via environment variables (e.g. `MINER_MODE`, `GATEWAY`, `NETWORK`,
-`WORKER_NAME`, `SERVER_URL`, `WALLET_ADDRESS`).
-
-## Server configuration
-
-| Env | Default | Description |
-|-----|---------|-------------|
-| `PORT` | `4000` | HTTP + WebSocket port |
-| `DB_PATH` | `./data/monitor.db` | SQLite database path |
-| `HEARTBEAT_TIMEOUT_MS` | `20000` | Silence before a worker goes offline |
-| `HISTORY_RETENTION_MS` | `86400000` | How long stats history is kept |
-
-### Server API
-
-- `GET  /health`
-- `GET  /api/workers` · `GET /api/workers/:id`
-- `GET  /api/workers/:id/history?minutes=60`
-- `GET  /api/stats/summary`
-- `POST /api/workers/register` · `POST /api/workers/:id/heartbeat`
-- `WS   /ws` — pushes a full fleet snapshot on connect and on every change
-
-## Install the dashboard as an app
-
-The dashboard is a PWA. Open it in a browser and use **Install app** (desktop
-Chrome/Edge) or **Add to Home Screen** (mobile).
-
-## Tests
-
-```bash
-cd worker && pip install -e '.[test]' && pytest   # PoUW correctness + solution search
-npm --prefix server test                          # store, aggregation, stale detection
-```
-
-## How the worker works (reference mode)
-
-1. Fetches a job from the gateway (`getMiningInfo` → incomplete block header + target).
-2. Draws int8 input matrices A, B and derives the commitment seeds binding them
-   to the header (so noise can't be ground for free).
-3. Generates low-rank int8 noise, runs the tiled noisy GEMM, and accumulates a
-   keyed-BLAKE3 transcript per output hash tile.
-4. A tile whose `BLAKE3(transcript, key) <= target` is a solution; it is
-   verified locally (the denoised product equals A·B) and submitted to the gateway.
-5. Every 5 seconds it posts a heartbeat (TOPS, solutions, accepted, rejected,
-   uptime, plus GPU power/util/temp via `nvidia-smi` when available) to the
-   monitoring server. The dashboard shows fleet power and **efficiency
-   (TOPS/W)** — the number to maximize to save on electricity.
-
-In **live** mode steps 2–4 are performed by the official `pearl_mining` /
-`pearl-gateway` stack (GPU GEMM + Plonky2 ZK proof + block submission).
+Hermes inherits this. `risk_engine.validate_bet` is the single gate. The
+server never places real bets. If you wire a real sportsbook adapter in
+the future, you place that adapter behind `validate_bet` — not around it.
